@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Encryption Tool</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .tool-section {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        
+        .image-area {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        
+        .canvas-container {
+            text-align: center;
+        }
+        
+        canvas {
+            max-width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .controls {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        label {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        select, input, button {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            cursor: pointer;
+            border: none;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        
+        .status {
+            text-align: center;
+            font-style: italic;
+            color: #7f8c8d;
+            margin-top: 10px;
+        }
+        
+        .original-title {
+            color: #27ae60;
+        }
+        
+        .processed-title {
+            color: #e74c3c;
+        }
+    </style>
+</head>
+<body>
+    <h1>Pixel Encryption Tool</h1>
+    
+    <div class="container">
+        <div class="tool-section">
+            <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+            <div class="action-buttons">
+                <button id="uploadButton">Upload Image</button>
+                <button id="resetButton" disabled>Reset</button>
+            </div>
+        </div>
+        
+        <div class="image-area">
+            <div class="canvas-container">
+                <h3 class="original-title">Original Image</h3>
+                <canvas id="originalCanvas" width="400" height="300"></canvas>
+            </div>
+            <div class="canvas-container">
+                <h3 class="processed-title">Processed Image</h3>
+                <canvas id="processedCanvas" width="400" height="300"></canvas>
+            </div>
+        </div>
+        
+        <div class="tool-section">
+            <div class="controls">
+                <div class="control-group">
+                    <label for="operation">Encryption Operation:</label>
+                    <select id="operation">
+                        <option value="xor">XOR with key</option>
+                        <option value="swap-red-blue">Swap Red & Blue channels</option>
+                        <option value="invert">Invert colors</option>
+                        <option value="shift">Shift pixels</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label for="key">Encryption Key:</label>
+                    <input type="number" id="key" min="0" max="255" value="123">
+                </div>
+            </div>
+            
+            <div class="action-buttons">
+                <button id="encryptButton" disabled>Encrypt</button>
+                <button id="decryptButton" disabled>Decrypt</button>
+                <button id="saveButton" disabled>Save Result</button>
+            </div>
+            
+            <p class="status" id="statusMessage">Upload an image to begin</p>
+        </div>
+    </div>
+
+    <script>
+        // DOM elements
+        const uploadButton = document.getElementById('uploadButton');
+        const resetButton = document.getElementById('resetButton');
+        const encryptButton = document.getElementById('encryptButton');
+        const decryptButton = document.getElementById('decryptButton');
+        const saveButton = document.getElementById('saveButton');
+        const imageUpload = document.getElementById('imageUpload');
+        const originalCanvas = document.getElementById('originalCanvas');
+        const processedCanvas = document.getElementById('processedCanvas');
+        const operationSelect = document.getElementById('operation');
+        const keyInput = document.getElementById('key');
+        const statusMessage = document.getElementById('statusMessage');
+        
+        // Canvas contexts
+        const originalCtx = originalCanvas.getContext('2d');
+        const processedCtx = processedCanvas.getContext('2d');
+        
+        // Image data
+        let originalImageData = null;
+        let processedImageData = null;
+        let imageWidth = 0;
+        let imageHeight = 0;
+        
+        // Event listeners
+        uploadButton.addEventListener('click', () => imageUpload.click());
+        imageUpload.addEventListener('change', handleImageUpload);
+        resetButton.addEventListener('click', resetImage);
+        encryptButton.addEventListener('click', encryptImage);
+        decryptButton.addEventListener('click', decryptImage);
+        saveButton.addEventListener('click', saveImage);
+        operationSelect.addEventListener('change', updateKeyVisibility);
+        
+        // Initialize
+        updateKeyVisibility();
+        
+        function updateKeyVisibility() {
+            const operation = operationSelect.value;
+            keyInput.style.display = (operation === 'xor' || operation === 'shift') ? 'block' : 'none';
+        }
+        
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    // Set canvas dimensions
+                    const maxWidth = 400;
+                    const ratio = maxWidth / img.width;
+                    imageWidth = maxWidth;
+                    imageHeight = img.height * ratio;
+                    
+                    originalCanvas.width = imageWidth;
+                    originalCanvas.height = imageHeight;
+                    processedCanvas.width = imageWidth;
+                    processedCanvas.height = imageHeight;
+                    
+                    // Draw original image
+                    originalCtx.drawImage(img, 0, 0, imageWidth, imageHeight);
+                    
+                    // Copy to processed canvas
+                    processedCtx.drawImage(img, 0, 0, imageWidth, imageHeight);
+                    
+                    // Get image data
+                    originalImageData = originalCtx.getImageData(0, 0, imageWidth, imageHeight);
+                    processedImageData = processedCtx.getImageData(0, 0, imageWidth, imageHeight);
+                    
+                    // Enable buttons
+                    resetButton.disabled = false;
+                    encryptButton.disabled = false;
+                    decryptButton.disabled = false;
+                    saveButton.disabled = false;
+                    
+                    statusMessage.textContent = "Image loaded successfully";
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function resetImage() {
+            if (!originalImageData) return;
+            
+            processedCtx.putImageData(originalImageData, 0, 0);
+            processedImageData = processedCtx.getImageData(0, 0, imageWidth, imageHeight);
+            statusMessage.textContent = "Image reset to original";
+        }
+        
+        function encryptImage() {
+            if (!processedImageData) return;
+            
+            processImage(true);
+            statusMessage.textContent = "Image encrypted successfully";
+        }
+        
+        function decryptImage() {
+            if (!processedImageData) return;
+            
+            processImage(false);
+            statusMessage.textContent = "Image decrypted successfully";
+        }
+        
+        function processImage(isEncrypting) {
+            const data = processedImageData.data;
+            const operation = operationSelect.value;
+            const key = parseInt(keyInput.value);
+            
+            switch(operation) {
+                case 'xor':
+                    for (let i = 0; i < data.length; i += 4) {
+                        data[i] = data[i] ^ key;     // R
+                        data[i + 1] = data[i + 1] ^ key; // G
+                        data[i + 2] = data[i + 2] ^ key; // B
+                    }
+                    break;
+                    
+                case 'swap-red-blue':
+                    for (let i = 0; i < data.length; i += 4) {
+                        const temp = data[i];
+                        data[i] = data[i + 2];
+                        data[i + 2] = temp;
+                    }
+                    break;
+                    
+                case 'invert':
+                    for (let i = 0; i < data.length; i += 4) {
+                        data[i] = 255 - data[i];     // R
+                        data[i + 1] = 255 - data[i + 1]; // G
+                        data[i + 2] = 255 - data[i + 2]; // B
+                    }
+                    break;
+                    
+                case 'shift':
+                    const shiftValue = isEncrypting ? key : -key;
+                    const tempData = new Uint8ClampedArray(data);
+                    
+                    for (let i = 0; i < data.length; i += 4) {
+                        const newPos = (i + shiftValue * 4) % data.length;
+                        if (newPos < 0) newPos += data.length;
+                        
+                        data[newPos] = tempData[i];     // R
+                        data[newPos + 1] = tempData[i + 1]; // G
+                        data[newPos + 2] = tempData[i + 2]; // B
+                        data[newPos + 3] = tempData[i + 3]; // A
+                    }
+                    break;
+            }
+            
+            processedCtx.putImageData(processedImageData, 0, 0);
+        }
+        
+        function saveImage() {
+            const link = document.createElement('a');
+            link.download = 'processed-image.png';
+            link.href = processedCanvas.toDataURL('image/png');
+            link.click();
+            statusMessage.textContent = "Image saved successfully";
+        }
+    </script>
+</body>
+</html>
